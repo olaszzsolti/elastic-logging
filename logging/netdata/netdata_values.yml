@@ -1,0 +1,34 @@
+ingress:
+  enabled: false
+
+image:
+  repository: armdocker.rnd.ericsson.se/dockerhub-ericsson-remote/netdata/netdata
+
+wgetImage:
+  repository: armdocker.rnd.ericsson.se/dockerhub-ericsson-remote/netdata/wget
+
+sd:
+  repository: armdocker.rnd.ericsson.se/dockerhub-ericsson-remote/netdata/agent-sd
+
+service:
+  type: ClusterIP
+  port: 19998
+
+parent:
+  port: 19997
+  alarms:
+    persistence: false
+  database:
+    persistence: false
+  configs:
+    netdata:
+      data: |
+        [global]
+          update every = 1
+
+child:
+  configs:
+    netdata:
+      data: |
+        [global]
+          update every = 1

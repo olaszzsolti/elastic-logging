@@ -1,0 +1,117 @@
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  name: "lfdia-fluentbit-cfmap"
+  labels:
+    app: lfdialoggingapp
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        flush        3
+        daemon       Off
+        log_level    info
+        parsers_file parsers.conf
+        plugins_file plugins.conf
+        http_server  Off
+        http_listen  0.0.0.0
+        http_port    2020
+        storage.metrics on
+    [INPUT]
+        Name tail
+        Path /logs/fluent/fluentbit-HangingResources.log
+        Parser hangingresources
+        Tag process
+    [INPUT]
+        Name tail
+        Path /logs/fluent/unprocessed-HangingResources.log
+        Tag unprocessed
+    [INPUT]
+        Name tail
+        Path /logs/fluent/logstash-HangingResources.log
+        Tag logstash
+    [INPUT]
+        Name tail
+        Path /logs/fluent/elasticsearch-HangingResources.log
+        Tag elasticsearch
+    [FILTER]
+        Name modify
+        Match *
+        Add logplane app-logs
+        Add severity info
+        Add log_type HangingResourcesLog
+        Add version 0.2.0
+        Add service_id test-svc
+        Add pod.name test-pod
+        Add pod.uid test-uid
+        Add node.name test-node
+        Add kubernetes.namespace test-namespace
+        Add extra_data.project th
+        Remove_wildcard ignore
+    [FILTER]
+        Name modify
+        Match process
+        Add extra_data.processor fluentbit
+    [FILTER]
+        Name nest
+        Match process
+        Operation nest
+        Wildcard message_*
+        Nest_under message
+        Remove_prefix message_
+    [FILTER]
+        Name modify
+        Match unprocessed
+        Add extra_data.processor unprocessed
+    [FILTER]
+        Name modify
+        Match unprocessed
+        Rename log message
+    [FILTER]
+        Name modify
+        Match logstash
+        Add extra_data.processor logstash
+    [FILTER]
+        Name modify
+        Match elasticsearch
+        Add extra_data.processor elasticsearch
+    [FILTER]
+        Name nest
+        Match *
+        Operation nest
+        Wildcard extra_data.*
+        Nest_under extra_data
+        Remove_prefix extra_data.
+    [FILTER]
+        Name nest
+        Match *
+        Operation nest
+        Wildcard pod.*
+        Nest_under kubernetes.pod
+        Remove_prefix pod.
+    [FILTER]
+        Name nest
+        Match *
+        Operation nest
+        Wildcard node.*
+        Nest_under kubernetes.node
+        Remove_prefix node.
+    [FILTER]
+        Name nest
+        Match *
+        Operation nest
+        Wildcard kubernetes.*
+        Nest_under kubernetes
+        Remove_prefix kubernetes.
+    [OUTPUT]
+        Name   http
+        Match  *
+        Host   logstash-logstash
+        Port   5045
+        Format json
+  parsers.conf: |
+    [PARSER]
+        Name   hangingresources
+        Format regex
+        Regex  (^(?<time>[^ ]*) PayloadMatedPair=(?<message_payloadmatedpair>[^ ]*) (?<message_context_id>[^,]*),(?<message_termination_id>[^,]*),(?<message_reason>[^, ]*)(?<ignore> *)\z|^(?<time>[^ ]*) PayloadMatedPair=(?<message_payloadmatedpair>[^ ]*) (?<message_callee>[^,]*),(?<message_caller>[^,]*),(?<message_call_id>[^,]*),(?<message_context_id>[^,]*),(?<message_termination_id>[^,]*),(?<message_reason>[^ ]*))
+        Time_Key time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z

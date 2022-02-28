@@ -1,0 +1,141 @@
+PUT _ingest/pipeline/epic
+{
+  "processors": [
+    {
+      "trim": {
+        "field": "message"
+      }
+    },
+    {
+      "dissect": {
+        "field": "message",
+        "pattern": "%{@ts} PayloadMatedPair=%{payloadmatedpair} %{k1},%{k2},%{rest}"
+      }
+    },
+    {
+      "remove": {
+        "field": "message"
+      }
+    },
+    {
+      "date": {
+        "field": "@ts",
+        "target_field": "@timestamp",
+        "formats": [
+          "ISO8601"
+        ]
+      }
+    },
+    {
+      "remove": {
+        "field": "@ts"
+      }
+    },
+    {
+      "csv": {
+        "field": "rest",
+        "target_fields": [
+          "k3",
+          "k4",
+          "k5",
+          "k6"
+        ]
+      }
+    },
+    {
+      "remove": {
+        "field": "rest"
+      }
+    },
+    {
+      "rename": {
+        "if": "ctx.k6 == null",
+        "field": "k1",
+        "target_field": "context_id"
+      }
+    },
+    {
+      "rename": {
+        "if": "ctx.k6 == null",
+        "field": "k2",
+        "target_field": "termination_id"
+      }
+    },
+    {
+      "rename": {
+        "if": "ctx.k6 == null",
+        "field": "k3",
+        "target_field": "reason"
+      }
+    },
+    {
+      "rename": {
+        "if": "ctx.k6 != null",
+        "field": "k1",
+        "target_field": "callee"
+      }
+    },
+    {
+      "rename": {
+        "if": "ctx.k6 != null",
+        "field": "k2",
+        "target_field": "caller"
+      }
+    },
+    {
+      "rename": {
+        "if": "ctx.k6 != null",
+        "field": "k3",
+        "target_field": "call_id"
+      }
+    },
+    {
+      "rename": {
+        "if": "ctx.k6 != null",
+        "field": "k4",
+        "target_field": "context_id"
+      }
+    },
+    {
+      "rename": {
+        "if": "ctx.k6 != null",
+        "field": "k5",
+        "target_field": "termination_id"
+      }
+    },
+    {
+      "rename": {
+        "if": "ctx.k6 != null",
+        "field": "k6",
+        "target_field": "reason"
+      }
+    },
+    {
+      "remove": {
+        "field": [
+          "path",
+          "host",
+          "@version"
+        ]
+      }
+    },
+    {
+      "set": {
+        "field": "logplane",
+        "value": "app-logs"
+      }
+    },
+    {
+      "set": {
+        "field": "log_type",
+        "value": "HangingResourcesLog"
+      }
+    },
+    {
+      "set": {
+        "field": "extra_data.project",
+        "value": "th"
+      }
+    }
+  ]
+}

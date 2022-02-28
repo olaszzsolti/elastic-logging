@@ -1,0 +1,7 @@
+#/bin/bash
+
+kubectl -n hsnlab apply -f lfdia/logging/filebeat/lfdia-filebeat-cfmap.yml
+kubectl -n hsnlab apply -f lfdia/logging/fluent-bit/lfdia-fluentbit-cfmap.yml
+kubectl -n hsnlab apply -f lfdia/logging/application/k8s/lfdiaLoggingApp.yml
+
+kubectl -n hsnlab get pods -w

@@ -1,0 +1,381 @@
+extraPorts:
+  - name: elastic
+    containerPort: 5044
+  - name: fluent
+    containerPort: 5045
+
+service:
+  ports:
+    - name: elastic
+      port: 5044
+      targetPort: 5044
+    - name: fluent
+      port: 5045
+      targetPort: 5045
+
+logstashJavaOpts: "-Xmx4g -Xms4g"
+
+resources:
+  requests:
+    cpu: "2000m"
+    memory: "6Gi"
+  limits:
+    cpu: "2000m"
+    memory: "6Gi"
+
+logstashConfig:
+  logstash.yml: |
+    xpack.monitoring.enabled: false
+    xpack.management.enabled: false
+    pipeline.workers: 2
+    pipeline.batch.delay: 50
+    pipeline.ordered: auto
+    http.host: 0.0.0.0
+  adp-json-validdation.rb: |
+    $validationDecodedJsonFieldParamName = "decodedJsonField"
+    $failTagParamName = "failTag"
+    def register(param)
+        decodedJsonFieldParamName = $validationDecodedJsonFieldParamName
+        failTagParamName = $failTagParamName
+        logger.debug("Check if parameter #{decodedJsonFieldParamName} is provided")
+        if (param[decodedJsonFieldParamName].nil? || param[decodedJsonFieldParamName].empty?)
+            raise ArgumentError.new("Parameter \"#{decodedJsonFieldParamName}\" is not provided")
+        end
+        logger.debug("Check if parameter #{failTagParamName} is provided")
+        if (param[failTagParamName].nil? || param[failTagParamName].empty?)
+            raise ArgumentError.new("Parameter \"#{failTagParamName}\" is not provided")
+        end
+        @decodedJsonField = param[decodedJsonFieldParamName]
+        @failTag = param[failTagParamName]
+        @REQUIRED_FIELDS = ["version", "timestamp", "severity", "service_id", "message"]
+        @VALID_FIELDS_VERSION_0_2_0 = @REQUIRED_FIELDS + ["metadata"]
+        @VALID_FIELDS_VERSION_0_3_0 = @VALID_FIELDS_VERSION_0_2_0 + ["facility", "subject", "resp_message", "resp_code"]
+        @VALID_FIELDS_VERSION_1_0_0 = @VALID_FIELDS_VERSION_0_3_0 + ["extra_data"]
+        @VERSION_0_2_0 = "0.2.0"
+        @VERSION_0_3_0 = "0.3.0"
+        @VERSION_1_0_0 = "1.0.0"
+        @VALID_VERSIONS = [@VERSION_0_2_0, @VERSION_0_3_0, @VERSION_1_0_0]
+        @VALID_SEVERITIES = ["debug", "info", "warning", "error", "critical"]
+        @VALID_METADATA_FIELDS = ["function", "category", "proc_id", "ul_id"]
+        @VALID_TIMESTAMP_REGEX = /^\d{4}\-\d\d\-\d\d[T][\d:\.]+([zZ]|([+\-])(\d\d):?(\d\d))?$/
+        def gotRequiredFields(fields)
+            @REQUIRED_FIELDS.each do |field|
+                if (!fields.include?(field))
+                    return false
+                end
+            end
+            return true
+        end
+        def validVersion(version)
+            if (version.class != String)
+                return false
+            end
+            return @VALID_VERSIONS.include?(version)
+        end
+        def validMessage(message)
+            if (message.class != String)
+                return false
+            end
+            return true
+        end
+        def validSeverity(severity)
+            if (severity.class != String)
+                return false
+            end
+            return @VALID_SEVERITIES.include?(severity)
+        end
+        def validServiceId(serviceId)
+            if (serviceId.class != String)
+                return false
+            end
+            return true
+        end
+        def validExtraData(extraData)
+            if (extraData.nil?)
+                return true
+            end
+            if (extraData.class != Hash)
+                return false
+            end
+            if (extraData.empty?)
+                return false
+            end
+            return true
+        end
+        def validMetadata(metadata, version)
+            if (metadata.nil?)
+                return true
+            end
+            if (metadata.class != Hash)
+                return false
+            end
+            if (metadata.empty?)
+                return false
+            end
+            case version
+            when @VERSION_0_2_0, @VERSION_0_3_0
+                if (metadata.keys.length > @VALID_METADATA_FIELDS.length)
+                    return false
+                end
+                metadata.keys.each do |key|
+                    if (!@VALID_METADATA_FIELDS.include?(key))
+                        return false
+                    end
+                    if (metadata[key].class != String)
+                        return false
+                    end
+                end
+            when @VERSION_1_0_0
+                metadata.keys.each do |key|
+                    if (metadata[key].class != String)
+                        return false
+                    end
+                end
+            end
+            return true
+        end
+        def validTimestamp(timestamp)
+            if (timestamp.class == LogStash::Timestamp)
+                return true
+            end
+            if (timestamp.class != String)
+                return false
+            end
+            return timestamp =~ @VALID_TIMESTAMP_REGEX
+        end
+        def validFacility(facility)
+            if (!facility.nil? && facility.class != String)
+                return false
+            end
+            return true
+        end
+        def validSubject(subject)
+            if (!subject.nil? && subject.class != String)
+                return false
+            end
+            return true
+        end
+        def validRespMessage(respMessage)
+            if (!respMessage.nil? && respMessage.class != String)
+                return false
+            end
+            return true
+        end
+        def validRespCode(respCode)
+            if (!respCode.nil? && respCode.class != String)
+                return false
+            end
+            return true
+        end
+        def gotNoAdditionalFields(fields, version)
+            case version
+            when @VERSION_0_2_0
+                return (fields & @VALID_FIELDS_VERSION_0_2_0) == fields
+            when @VERSION_0_3_0
+                return (fields & @VALID_FIELDS_VERSION_0_3_0) == fields
+            when @VERSION_1_0_0
+                return (fields & @VALID_FIELDS_VERSION_1_0_0) == fields
+            end
+            return false
+        end
+        def addValidationFailureTag(event)
+            tags = event.get("tags")
+            if (tags.nil?)
+                tags = []
+            end
+            tags.push(@failTag)
+            event.set("tags", tags)
+            return [event]
+        end
+    end
+    def filter(event)
+        logger.debug("Validate ADP JSON events")
+        logger.debug("Check if event got required fields")
+        if (!gotRequiredFields(event.to_hash.keys))
+            return addValidationFailureTag(event)
+        end
+        logger.debug("Check if event got valid version")
+        version = event.get("[version]")
+        if (!validVersion(version))
+            return addValidationFailureTag(event)
+        end
+        logger.debug("Check if event got valid message")
+        if (!validMessage(event.get("[message]")))
+            return addValidationFailureTag(event)
+        end
+        logger.debug("Check if event got valid timestamp")
+        if (!validTimestamp(event.get("[timestamp]")))
+            return addValidationFailureTag(event)
+        end
+        logger.debug("Check if event got valid severity levels")
+        if (!validSeverity(event.get("[severity]")))
+            return addValidationFailureTag(event)
+        end
+        logger.debug("Check if event got valid service id")
+        if (!validServiceId(event.get("[service_id]")))
+            return addValidationFailureTag(event)
+        end
+        logger.debug("Check if event got metadata field defined")
+        metadata = event.get("[metadata]")
+        if (!validMetadata(metadata, version))
+            return addValidationFailureTag(event)
+        end
+        case version
+        when @VERSION_0_3_0, @VERSION_1_0_0
+            logger.debug("Check if event got facility field defined")
+            if (!validFacility(event.get("[facility]")))
+                return addValidationFailureTag(event)
+            end
+            logger.debug("Check if event got subject field defined")
+            if (!validSubject(event.get("[subject]")))
+                return addValidationFailureTag(event)
+            end
+            logger.debug("Check if event got resp_message field defined")
+            if (!validRespMessage(event.get("[resp_message]")))
+                return addValidationFailureTag(event)
+            end
+            logger.debug("Check if event got resp_code field defined")
+            if (!validSubject(event.get("[resp_code]")))
+                return addValidationFailureTag(event)
+            end
+            if (version == @VERSION_1_0_0)
+                logger.debug("Check if event got extraData field defined")
+                extraData = event.get("[extra_data]")
+                if (!validExtraData(extraData))
+                    return addValidationFailureTag(event)
+                end
+            end
+        end
+        logger.debug("Check if event got any additional fields then accepted")
+        if (!gotNoAdditionalFields(event.to_hash.keys, version))
+            return addValidationFailureTag(event)
+        end
+        logger.debug("Event is in a valid ADP JSON format")
+        return [event]
+    end
+
+logstashPipeline:
+  logstash.conf: |
+    input {
+       beats {
+          port => 5044
+          id => "elastic"
+          type => "elastic"
+       }
+       http {
+          port => 5045
+          id => "fluent"
+          type => "fluent"
+       }
+    }
+    filter {
+      mutate { add_field => { "[extra_data][status]" => "unprocessed" } }
+      if [type] == "readiness" {
+        drop {}
+      } else if [type] == "fluent" {
+        if [extra_data][processor] == "fluentbit" {
+            mutate { update => { "[extra_data][status]" => "processed" } }
+        }
+        date {
+            match => [ "date", "UNIX" ]
+            remove_field => [ "date" ]
+        }
+        mutate {
+            remove_field => [ "headers", "host", "type", "@version" ]
+        }
+      } else if [extra_data][processor] == "logstash" {
+        mutate { rename => { "msg" => "message" } }
+        mutate { strip => [ "[message]" ] }
+        dissect {
+          mapping => {
+            "message" => "%{[msg][ts]} PayloadMatedPair=%{[msg][payloadmatedpair]} %{[msg][k1]},%{[msg][k2]},%{[msg][rest]}"
+          }
+          remove_field => [ "message" ]
+        }
+        date {
+          match => [ "[msg][ts]", "ISO8601" ]
+          remove_field => [ "[msg][ts]" ]
+        }
+        csv {
+          columns => ["[msg][k3]","[msg][k4]","[msg][k5]","[msg][k6]"]
+          source => "[msg][rest]"
+          remove_field => [ "[msg][rest]" ]
+        }
+        if [msg][k4] {
+          mutate {
+            rename => { "[msg][k1]" => "[msg][callee]" }
+            rename => { "[msg][k2]" => "[msg][caller]" }
+            rename => { "[msg][k3]" => "[msg][call_id]" }
+            rename => { "[msg][k4]" => "[msg][context_id]" }
+            rename => { "[msg][k5]" => "[msg][termination_id]" }
+            rename => { "[msg][k6]" => "[msg][reason]" }
+          }
+        } else {
+          mutate {
+            rename => { "[msg][k1]" => "[msg][context_id]" }
+            rename => { "[msg][k2]" => "[msg][termination_id]" }
+            rename => { "[msg][k3]" => "[msg][reason]" }
+          }
+        }
+        mutate {
+          rename => { "msg" => "message" }
+        }
+        mutate {
+          remove_field => [ "@version", "agent", "ecs", "beat", "log", "type", "source", "stream", "offset", "json", "host", "input", "prospector", "tags", "[kubernetes][container][image]", "[kubernetes][labels]" ]
+        }
+        mutate { update => { "[extra_data][status]" => "processed" } }
+      } else if [extra_data][processor] == "filebeat" {
+        mutate { rename => { "msg" => "message" } }
+        mutate {
+          remove_field => [ "@version", "agent", "ecs", "beat", "log", "type", "source", "stream", "offset", "json", "host", "input", "prospector", "tags", "[kubernetes][container][image]", "[kubernetes][labels]" ]
+        }
+        mutate { update => { "[extra_data][status]" => "processed" } }
+      } else if [extra_data][processor] == "elasticsearch" {
+        mutate { rename => { "msg" => "message" } }
+        mutate {
+          remove_field => [ "@version", "agent", "ecs", "beat", "log", "type", "source", "stream", "offset", "json", "host", "input", "prospector", "tags", "[kubernetes][container][image]", "[kubernetes][labels]" ]
+        }
+        mutate { update => { "[extra_data][status]" => "unprocessed" } }
+      }
+      mutate {
+        add_field => { "timestamp" => "%{@timestamp}" }
+      }
+      ruby {
+        path => "/usr/share/logstash/config/adp-json-validdation.rb"
+        script_params => {
+          "decodedJsonField" => "ignore"
+          "failTag" => "schema-validation-unknown"
+        }
+      }
+      if [extra_data][asi][log_plane] == "alarm" {
+        mutate {
+            replace => {"logplane" => "adp-app-asi-logs"}
+        }
+      } else if [facility] == "log audit" {
+         mutate {
+            replace => {"logplane" => "adp-app-audit-logs"}
+         }
+      }
+    }
+    output {
+       if [extra_data][processor] == "elasticsearch" {
+          elasticsearch {
+             hosts => ["es-ingest:9200"]
+             http_compression => true
+             index => "lfdia-processed"
+             pipeline => "lfdia"
+          }
+       } else {
+          elasticsearch {
+             hosts => ["es-data:9200"]
+             http_compression => true
+             index => "lfdia-%{[extra_data][status]}"
+          }
+       }
+       # stdout { codec => json_lines }
+       # elasticsearch {
+       #   hosts => ["es-data:9200"]
+       #   http_compression => true
+       #   index => "lfdia-%{[extra_data][status]}"
+       # }
+    }

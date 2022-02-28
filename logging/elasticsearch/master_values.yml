@@ -1,0 +1,71 @@
+clusterName: "es"
+nodeGroup: "master"
+masterService: "es-master"
+
+lifecycle:
+  postStart:
+    exec:
+      command:
+        - bash
+        - -c
+        - |
+          #!/bin/bash
+          # Add a template to adjust number of shards/replicas
+          TEMPLATE_NAME=lfdia_set_shards
+          INDEX_PATTERN="*"
+          SHARD_COUNT=5
+          REPLICA_COUNT=1
+          ES_URL=http://localhost:9200
+          while [[ "$(curl -s -o /dev/null -w '%{http_code}\n' $ES_URL)" != "200" ]]; do sleep 1; done
+          curl -XPUT "$ES_URL/_template/$TEMPLATE_NAME" -H 'Content-Type: application/json' -d'{"index_patterns":['\""$INDEX_PATTERN"\"'],"settings":{"number_of_shards":'$SHARD_COUNT',"number_of_replicas":'$REPLICA_COUNT'}}'
+
+  postStart:
+    exec:
+      command:
+        - bash
+  #       - -c
+  #       - |
+  #         #!/bin/bash
+  #         # Add a template to adjust number of shards/replicas
+  #         TEMPLATE_NAME=my_template
+  #         INDEX_PATTERN="logstash-*"
+  #         SHARD_COUNT=8
+  #         REPLICA_COUNT=1
+  #         ES_URL=http://localhost:9200
+  #         while [[ "$(curl -s -o /dev/null -w '%{http_code}\n' $ES_URL)" != "200" ]]; do sleep 1; done
+  #         curl -XPUT "$ES_URL/_template/$TEMPLATE_NAME" -H 'Content-Type: application/json' -d'{"index_patterns":['\""$INDEX_PATTERN"\"'],"settings":{"number_of_shards":'$SHARD_COUNT',"number_of_replicas":'$REPLICA_COUNT'}}'
+
+
+# Set role as master.
+roles:
+  master: "true"
+  ingest: "false"
+  data: "false"
+  remote_cluster_client: "false"
+  ml: "false"
+replicas: 3
+
+# Shrink default JVM heap.
+esJavaOpts: "-Xmx512m -Xms512m"
+
+# Allocate smaller chunks of memory per pod.
+resources:
+  limits:
+    cpu: "500m"
+    memory: "1Gi"
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+
+# Request smaller persistent volumes.
+volumeClaimTemplate:
+  resources:
+    requests:
+      storage: 10G
+
+readinessProbe:
+  failureThreshold: 3
+  initialDelaySeconds: 120
+  periodSeconds: 30
+  successThreshold: 3
+  timeoutSeconds: 15

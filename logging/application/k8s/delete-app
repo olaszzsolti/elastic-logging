@@ -1,0 +1,6 @@
+#/bin/bash
+
+kubectl -n logging delete statefulset lfdialoggingapp
+kubectl -n logging delete configmap lfdia-filebeat-cfmap
+
+kubectl -n logging get pods -w

@@ -1,0 +1,142 @@
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  name: "lfdia-fluentbit-cfmap"
+  labels:
+    app: lfdialoggingapp
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        flush        1
+        daemon       Off
+        log_level    info
+        parsers_file parsers.conf
+        plugins_file plugins.conf
+        http_server  Off
+        http_listen  0.0.0.0
+        http_port    2020
+        storage.metrics on
+    [INPUT]
+        Name tail
+        Path /logs/fluent/fluentbit-HangingResources.log*
+        Parser hangingresources
+        Tag process
+    [INPUT]
+        Name tail
+        Path /logs/fluent/unprocessed-HangingResources.log*
+        Tag unprocessed
+    [INPUT]
+        Name tail
+        Path /logs/fluent/logstash-HangingResources.log*
+        Tag logstash
+    [INPUT]
+        Name tail
+        Path /logs/fluent/elasticsearch-HangingResources.log*
+        Tag elasticsearch
+    [FILTER]
+        Name modify
+        Match *
+        Add logplane app-logs
+        Add severity info
+        Add log_type HangingResourcesLog
+        Add version 0.2.0
+        Add service_id test-svc
+        Add pod.name test-pod
+        Add pod.uid test-uid
+        Add node.name test-node
+        Add kubernetes.namespace test-namespace
+        Add extra_data.project th
+        Remove_wildcard ignore
+    [FILTER]
+        Name modify
+        Match process
+        Add extra_data.processor fluentbit
+    [FILTER]
+        Name nest
+        Match process
+        Operation nest
+        Wildcard message_*
+        Nest_under message
+        Remove_prefix message_
+    [FILTER]
+        Name modify
+        Match unprocessed
+        Add extra_data.processor unprocessed
+    [FILTER]
+        Name modify
+        Match unprocessed
+        Rename log message
+    [FILTER]
+        Name modify
+        Match logstash
+        Add extra_data.processor logstash
+    [FILTER]
+        Name modify
+        Match elasticsearch
+        Add extra_data.processor elasticsearch
+    [FILTER]
+        Name nest
+        Match *
+        Operation nest
+        Wildcard extra_data.*
+        Nest_under extra_data
+        Remove_prefix extra_data.
+    [FILTER]
+        Name nest
+        Match *
+        Operation nest
+        Wildcard pod.*
+        Nest_under kubernetes.pod
+        Remove_prefix pod.
+    [FILTER]
+        Name nest
+        Match *
+        Operation nest
+        Wildcard node.*
+        Nest_under kubernetes.node
+        Remove_prefix node.
+    [FILTER]
+        Name nest
+        Match *
+        Operation nest
+        Wildcard kubernetes.*
+        Nest_under kubernetes
+        Remove_prefix kubernetes.
+    [OUTPUT]
+        Name   http
+        Match  *
+        Host   minimum-logstash-logstash
+        Port   5045
+        Format json
+        tls         On
+        tls.verify  On
+        tls.ca_file /usr/share/fleunt-bit/ca.crt
+        workers 8
+  parsers.conf: |
+    [PARSER]
+        Name   hangingresources
+        Format regex
+        Regex  (^(?<time>[^ ]*) PayloadMatedPair=(?<message_payloadmatedpair>[^ ]*) (?<message_context_id>[^,]*),(?<message_termination_id>[^,]*),(?<message_reason>[^, ]*)(?<ignore> *)\z|^(?<time>[^ ]*) PayloadMatedPair=(?<message_payloadmatedpair>[^ ]*) (?<message_callee>[^,]*),(?<message_caller>[^,]*),(?<message_call_id>[^,]*),(?<message_context_id>[^,]*),(?<message_termination_id>[^,]*),(?<message_reason>[^ ]*))
+        Time_Key time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+  ca.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIDSTCCAjGgAwIBAgIUCiDZr7eNh+oX2Dub29D2wb1ePtswDQYJKoZIhvcNAQEL
+    BQAwNDEyMDAGA1UEAxMpRWxhc3RpYyBDZXJ0aWZpY2F0ZSBUb29sIEF1dG9nZW5l
+    cmF0ZWQgQ0EwHhcNMjExMTA4MTAyNjAwWhcNMjQxMTA3MTAyNjAwWjA0MTIwMAYD
+    VQQDEylFbGFzdGljIENlcnRpZmljYXRlIFRvb2wgQXV0b2dlbmVyYXRlZCBDQTCC
+    ASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAK1kD6U0ti9P7BWSDpV0DO/E
+    X4q8uGq5SZMskDs6jenDKq8aOHj+J0ozPf6twOltJQ2SS8pjL6JTotx86zYe4KsH
+    emnwiOJqmw/yYxZ3jmJKK8Sqo/rD3sZqQwgSHIe9uGtlMDgaD3FGB/BAdiv/8159
+    sBYMaIJbpJNPDZFs/qmhJFNCWtkWmfScC3/yWlMTkDcme2tUv52VZTFpUqshtvMz
+    4nSePWhReD5l1LsEkAhiVc3GoyCrR9v5JRa0l81UaiQi+30vD3RVABJkhCfMzi8x
+    w2vX9gN5G0N68OY13C3S+3teQlLm9PU/7eGsRFxYPlJL3iRwiviLyb4W0jRc73sC
+    AwEAAaNTMFEwHQYDVR0OBBYEFIs6DGGHkRyTO4Q6hHr99XArJZbLMB8GA1UdIwQY
+    MBaAFIs6DGGHkRyTO4Q6hHr99XArJZbLMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZI
+    hvcNAQELBQADggEBADPTa16qW2baS99Mx6OhivSSfilJkFWc9ipooUJvEv4K+j10
+    r+0qEyMu88zKHF84WEnTygJII8lW50ncPhOgbSGJEbJcz8bzA34yIFs4rs0tikzZ
+    M67XEx75zOW2zQOeJbiTfzhXQTJLnVzzQPnwWhE3jTG4QbEY5mFD8u7ABfemzoLj
+    Aqepbba91kmQvVF6jbiu8ZBe0VVJSyUSddVI98bs01BnWMOR3OmE89+sd8SRnIXa
+    C2FqBMXCSesYOQ7fGMpICzWeXCIIwLsi7+cUpShp9iL5Z9FU4Q/r9lgpdmssqkKF
+    7IPAMVhQSYUsvsPh2EJIpQB8CAgVwUkhj8fMOC8=
+    -----END CERTIFICATE-----

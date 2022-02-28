@@ -1,0 +1,169 @@
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  name: "lfdia-filebeat-cfmap"
+  labels:
+    app: lfdialoggingapp
+data:
+  filebeat.yml: |
+    filebeat.inputs:
+     - type: log
+       enabled: true
+       close_timeout: 5m
+       fields_under_root: true
+       publisher_pipeline.disable_host: true
+       paths:
+         - /logs/elastic/unprocessed-HangingResources.log
+       processors:
+         - drop_fields:
+             fields: ["input", "log", "prospector", "offset"]
+         - add_fields:
+             target: ''
+             fields:
+               extra_data.processor: "unprocessed"
+               logplane: "app-logs"
+               log_type: "HangingResourcesLog"
+               extra_data.project: "th"
+               kubernetes.pod.uid: "test-uid"
+               kubernetes.pod.name: "test-pod"
+               kubernetes.node.name: "test-node"
+               kubernetes.namespace: "test-namespace"
+               service_id: "test-svc"
+               severity: "info"
+               version: "0.2.0"
+     - type: log
+       enabled: true
+       close_timeout: 5m
+       fields_under_root: true
+       publisher_pipeline.disable_host: true
+       paths:
+         - /logs/elastic/filebeat-HangingResources.log
+       processors:
+         - dissect:
+             tokenizer: "%{timestamp} PayloadMatedPair=%{payloadmatedpair} %{k1},%{k2},%{rest}"
+             target_prefix: "msg"
+             trim_values: "all"
+         - timestamp:
+             field: msg.timestamp
+             layouts:
+               - '2006-01-02T15:04:05.999999999-0700'
+         - drop_fields:
+             fields: ["msg.timestamp"]
+         - decode_csv_fields:
+             fields:
+               msg.rest: msg.csv
+         - drop_fields:
+             fields: ["msg.rest"]
+         - extract_array:
+             field: msg.csv
+             mappings:
+               msg.k3: 0
+         - extract_array:
+             field: msg.csv
+             mappings:
+               msg.k4: 1
+               msg.k5: 2
+               msg.k6: 3
+         - drop_fields:
+             fields: ["msg.csv"]
+         - rename:
+             when:
+               not:
+                 has_fields: ['msg.k4']
+             fields:
+               - from: "msg.k1"
+                 to: "msg.context_id"
+               - from: "msg.k2"
+                 to: "msg.termination_id"
+               - from: "msg.k3"
+                 to: "msg.reason"
+         - rename:
+             when:
+               has_fields: ['msg.k4']
+             fields:
+               - from: "msg.k1"
+                 to: "msg.callee"
+               - from: "msg.k2"
+                 to: "msg.caller"
+               - from: "msg.k3"
+                 to: "msg.call_id"
+               - from: "msg.k4"
+                 to: "msg.context_id"
+               - from: "msg.k5"
+                 to: "msg.termination_id"
+               - from: "msg.k6"
+                 to: "msg.reason"
+         - drop_fields:
+             fields: ["message"]
+         - drop_fields:
+             fields: ["input", "log", "prospector", "offset"]
+         - add_fields:
+             target: ''
+             fields:
+               extra_data.processor: "filebeat"
+               logplane: "app-logs"
+               log_type: "HangingResourcesLog"
+               extra_data.project: "th"
+               kubernetes.pod.uid: "test-uid"
+               kubernetes.pod.name: "test-pod"
+               kubernetes.node.name: "test-node"
+               kubernetes.namespace: "test-namespace"
+               service_id: "test-svc"
+               severity: "info"
+               version: "0.2.0"
+     - type: log
+       enabled: true
+       close_timeout: 5m
+       fields_under_root: true
+       publisher_pipeline.disable_host: true
+       paths:
+         - /logs/elastic/logstash-HangingResources.log
+       processors:
+         - drop_fields:
+             fields: ["input", "log", "prospector", "offset"]
+         - add_fields:
+             target: ''
+             fields:
+               extra_data.processor: "logstash"
+               logplane: "app-logs"
+               log_type: "HangingResourcesLog"
+               extra_data.project: "th"
+               kubernetes.pod.uid: "test-uid"
+               kubernetes.pod.name: "test-pod"
+               kubernetes.node.name: "test-node"
+               kubernetes.namespace: "test-namespace"
+               service_id: "test-svc"
+               severity: "info"
+               version: "0.2.0"
+     - type: log
+       enabled: true
+       close_timeout: 5m
+       fields_under_root: true
+       publisher_pipeline.disable_host: true
+       paths:
+         - /logs/elastic/elasticsearch-HangingResources.log
+       processors:
+         - drop_fields:
+             fields: ["input", "log", "prospector", "offset"]
+         - add_fields:
+             target: ''
+             fields:
+               extra_data.processor: "elasticsearch"
+               logplane: "app-logs"
+               log_type: "HangingResourcesLog"
+               extra_data.project: "th"
+               kubernetes.pod.uid: "test-uid"
+               kubernetes.pod.name: "test-pod"
+               kubernetes.node.name: "test-node"
+               kubernetes.namespace: "test-namespace"
+               service_id: "test-svc"
+               severity: "info"
+               version: "0.2.0"
+    # output.console.pretty: true
+    output.logstash:
+      hosts: ["logstash-logstash:5044"]
+      bulk_max_size: 2048
+      worker: 1
+      pipelining: 0
+      ttl: 30
+      logging.level: "error"

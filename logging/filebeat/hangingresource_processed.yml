@@ -1,0 +1,158 @@
+filebeat.inputs:
+# Process plain text logs.
+ - type: log
+   enabled: true
+   # Set some values accodring to sample SBG configuration.
+   close_timeout: 5m
+   fields_under_root: true
+   # Enabling these in any of our cases, causes the addition of '"json": {}' to the root.
+   # json.keys_under_root: true
+   # json.message_key: message
+   # Remove some additional fields.
+   publisher_pipeline.disable_host: true
+   # Set path to HangingResources.log
+   paths:
+     - /logs/HangingResources.log # TODO: update path.
+     # Field format:
+     # @CY-@Cm-@CdT​@Ch:@Cn:@Cs.@Ck@Cz @Sl @Cb
+     # @CY-@Cm-@CdT​@Ch:@Cn:@Cs.@Ck@Cz -- timestamp
+     # @Sl -- PayloadMatedPair
+     # @Cb -- comma separated values (CSV) message part
+     # CSV part format 1: callee,caller,call_id,context_id,termination_id,reason
+     # Sample 1:
+     # 2021-06-28T16:10:32.519+0000 PayloadMatedPair=1 sip:+58555408658@xm.va;user=phone,sip:+19392560756@ubqabfx.sdou.jwg.q.mk;user=phone,glb65kd8530qlai5kalot9dcpvrux7u9,2156988,ip/730/402/2146359,media_inactivity​                                                                                                                                                                                                                                                                                                                                                                          
+     # CSV part format 2: context_id,termination_id,reason
+     # Sample 2:
+     # 2021-06-28T16:10:22.509+0000 PayloadMatedPair=3 311885,ip/867/966/8027539,normal_oab_process                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+   processors:
+     # Create new field 'msg'. Create new subfields:
+     # * 'timestamp': timestamp from log message.
+     # * 'payloadmatedpair': value of 'PayloadMatedPair' from log message.
+     # * 'k1': first field in the CSV part.
+     # * 'k2': second field in the CSV part.
+     # * 'rest': rest of the CSV part.
+     # Trim the log message at both ends.
+     - dissect:
+         tokenizer: "%{timestamp} PayloadMatedPair=%{payloadmatedpair} %{k1},%{k2},%{rest}"
+         target_prefix: "msg"
+         trim_values: "all"
+     # Parse the timestamp of the original msg and replace
+     # '@timestamp' with that.
+     - timestamp:
+         field: msg.timestamp
+         layouts:
+           - '2006-01-02T15:04:05.999999999-0700'
+     # Drop the log msg timestamp field: it is not needed anymore.
+     - drop_fields:
+         fields: ["msg.timestamp"]
+     # Process the 'msg.rest' as CSV then remove the now
+     # unnecessary field.
+     - decode_csv_fields:
+         fields:
+           msg.rest: msg.csv
+     - drop_fields:
+         fields: ["msg.rest"]
+     # Extract 'k3' from the processed CSV.
+     - extract_array:
+         field: msg.csv
+         mappings:
+           msg.k3: 0
+     # Extract the other fields (as 'k4', 'k5', 'k6') from the
+     # processed CSV if there are any of them.
+     - extract_array:
+         field: msg.csv
+         mappings:
+           msg.k4: 1
+           msg.k5: 2
+           msg.k6: 3
+     # Remove the now unnecessary CSV field.
+     - drop_fields:
+         fields: ["msg.csv"]
+     # When there is no 'k4' field (i.e., the log follows 'CSV part
+     # format 2') assigin the proper field names.
+     - rename:
+         when:
+           not:
+             has_fields: ['msg.k4']
+         fields:
+           - from: "msg.k1"
+             to: "msg.context_id"
+           - from: "msg.k2"
+             to: "msg.termination_id"
+           - from: "msg.k3"
+             to: "msg.reason"
+     # When there is a 'k4' field (i.e., the log follows 'CSV part
+     # format 1') assigin the proper field names.
+     - rename:
+         when:
+           has_fields: ['msg.k4']
+         fields:
+           - from: "msg.k1"
+             to: "msg.callee"
+           - from: "msg.k2"
+             to: "msg.caller"
+           - from: "msg.k3"
+             to: "msg.call_id"
+           - from: "msg.k4"
+             to: "msg.context_id"
+           - from: "msg.k5"
+             to: "msg.termination_id"
+           - from: "msg.k6"
+             to: "msg.reason"
+     # Replace the original 'message' field with the new 'msg'. First,
+     # drop the original 'message' field...
+     - drop_fields:
+         fields: ["message"]
+     # ... then rename 'msg' to 'message'.
+     # - rename:
+     #     fields:
+     #       - from: "msg"
+     #         to: "message"
+     # Delete unnecessary fields in accordance with SBG configuration.
+     # The following fields cannot be removed this way:
+     # '@metadata', 'ecs', 'host', 'agent'
+     - drop_fields:
+         fields: ["input", "log", "prospector", "offset"]
+     # Rename fields in accordance with SBG configuration, however no
+     # 'source' field is present in when running the stack locally.
+     # This is also signalled in the error field.
+     # - rename:
+     #     fields:
+     #       - from: "source"
+     #         to: "filename"
+     # Add new files to imitate ADP log schema (based on sample SBG log
+     # configuration).
+     - add_fields:
+         target: ''
+         fields:
+           logplane: "app-logs"
+           log_type: "HangingResourcesLog"
+           extra_data.project: "th"
+           kubernetes.pod.uid: "test-uid"
+           kubernetes.pod.name: "test-pod"
+           kubernetes.node.name: "test-node"
+           kubernetes.namespace: "test-namespace"
+           service_id: "test-svc"
+           severity: "info"
+           version: "0.2.0"
+# Test by outputting formatted JSON.
+# output.console.pretty: true
+
+# Send logs to Logstash.
+output.logstash:
+  hosts: ["localhost:5044"]
+  bulk_max_size: 2048
+  worker: 1
+  pipelining: 0
+  ttl: 30
+  logging.level: "error"
+  # Comment these for now, revisit them when deploying to Kubernetes
+  # ssl.* setup when TLS is enabled
+  # logging.metrics.enabled: false
+  # logging.to_files: true
+  # logging.files:
+  #   path: "/logs"
+  #   name: filebeat.log
+  #   keepfiles: 5
+  #   permissions: 0600
+  #   rotateeverybytes: 1000000

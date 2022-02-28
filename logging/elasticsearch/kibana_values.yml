@@ -1,0 +1,18 @@
+elasticsearchHosts: "http://minimum-es-master:9200"
+
+# Allocate smaller chunks of memory per pod.
+resources:
+  requests:
+    cpu: "100m"
+    memory: "500Mi"
+  limits:
+    cpu: "1000m"
+    memory: "1Gi"
+
+# In the E/// cluster this does not expose Kibana to the machine used
+# for accessing the cluster better to use port-forward instead:
+# kubectl -n hsnlab port-forward service/kibana-kibana 30562:5601
+# This makes it available at: http://localhost:30562
+# service:
+#   type: "NodePort"
+#   nodePort: "30562"

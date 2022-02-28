@@ -1,0 +1,138 @@
+clusterName: "minimum-es"
+nodeGroup: "master"
+masterService: "minimum-es-master"
+
+clusterHealthCheckParams: "wait_for_status=yellow&timeout=5s"
+
+# Set role as ingest.
+roles:
+  master: "true"
+  ingest: "false"
+  data: "false"
+  remote_cluster_client: "false"
+  ml: "false"
+replicas: 3
+
+# Shrink default JVM heap.
+esJavaOpts: "-Xmx512m -Xms512m"
+
+# Allocate smaller chunks of memory per pod.
+resources:
+  limits:
+    cpu: "100m"
+    memory: "1Gi"
+  requests:
+    cpu: "100m"
+    memory: "1Gi"
+
+# Request smaller persistent volumes.
+volumeClaimTemplate:
+  resources:
+    requests:
+      storage: 5G
+
+readinessProbe:
+  failureThreshold: 3
+  initialDelaySeconds: 120
+  periodSeconds: 30
+  successThreshold: 3
+  timeoutSeconds: 15
+
+#extraEnvs:
+#  - name: ELASTIC_PASSWORD
+#    value: "asdasdasdasdasdasdasd"
+#  - name: ELASTIC_USERNAME
+#    value: "asd"
+
+protocol: https
+
+esConfig:
+  elasticsearch.yml: |
+    xpack.security.enabled: true
+    xpack.security.http.ssl.enabled: true
+    xpack.security.transport.ssl.enabled: true
+    xpack.security.http.ssl.key: /usr/share/elasticsearch/config/elasticsearch.key
+    xpack.security.http.ssl.certificate: /usr/share/elasticsearch/config/elasticsearch.crt
+    xpack.security.http.ssl.certificate_authorities: /usr/share/elasticsearch/config/ca.crt
+    xpack.security.transport.ssl.key: /usr/share/elasticsearch/config/elasticsearch.key
+    xpack.security.transport.ssl.certificate: /usr/share/elasticsearch/config/elasticsearch.crt
+    xpack.security.transport.ssl.certificate_authorities: /usr/share/elasticsearch/config/ca.crt
+    xpack.security.transport.ssl.verification_mode: certificate
+#    xpack.security.transport.ssl.keystore.path: /usr/share/elasticsearch/config/certs/elasticsearch.p12
+#    xpack.security.transport.ssl.truststore.path: /usr/share/elasticsearch/config/certs/elasticsearch.p12
+#    xpack.security.http.ssl.truststore.path: /usr/share/elasticsearch/config/certs/elasticsearch.p12
+#    xpack.security.http.ssl.keystore.path: /usr/share/elasticsearch/config/certs/elasticsearch.p12
+  elasticsearch.key: |
+    -----BEGIN RSA PRIVATE KEY-----
+    MIIEogIBAAKCAQEAj4ZbnX1CInM5SZWYdxYwdECBS+4ZDV7TbyFkpOl5T+yWe3yf
+    Cb6htJ7oiAunO1r3kLjtNbtINtSSITLXS234hyuREk9ckn+NtddB+XjlZ79VQWQ9
+    VRv/2iX8nU1n1sdveRle1oeseaAHD1eO2uoUabs6SoJjcnfefNomt34r5RHeDspS
+    EsXzpBR4JthLHhvECmAGIfHxpNJeYO2W/jzFN6/7AMS73XWzk4Hlz3eL9iYtua7M
+    TOWHuRxJa5fz+AuHJdi0kImf1Fz9yObzz7ijeaP8gUtD9iNSP414CTINw3TJBZ1U
+    ttu4PUbGBGH7vFCIzXFWLldozHbtGkEuGnxSHwIDAQABAoIBAAZ/9zYyrgQRY87J
+    T5ZVEuyw3yopJklMuhaWVJCDYlMUS9xb0HgIghpD+BPxMymk/QE43sVILgUNq3CF
+    dOqdmFvGxVMm9PJNhIVvsjUyHHGOYLYNbBmmovemMMKO9tzrO0kotPrSOiVn8enn
+    9ThE0ZfYOtOVBBvzAch1uLsmo6ZED4WGBovmMAEQ7ckkkqIfD2tJy+ukMQP/Dhpj
+    F3naMeulEmSAQGGkL9zidlt0IYfYu6h33AbtlO+nX/Nh8E6i6Yc0/iZs2KoBEZbt
+    SrdKgqHSAfGsKc+HTxmgkD6jP2JhWwz1ewl/an0pnzmUgxdcQethZGrQsJAHkExj
+    lmf118ECgYEAwbmE664+QLQUour4+YnRltuZPXNPZxj1kyrcZHHpbeQsIpMeDc6P
+    19KPMabnk0PwWV7Tf+7Ct85RSOMsi3zCgKGOJYg6xu5vscBQxcxs2wfWwv8cH9e8
+    Yy1cKsaDhd2+PV3Gp+rr9r5T46Hstlnvg2jHRsgsWi9k3nF2wJ4R0VUCgYEAvamq
+    e54VggKMso3IONnWHn1VsA/rSEmdIVcV3fA8Pqvs5hfcFLV9iNuol1to5mmP67ZT
+    qlDi/xPSoGGddjuGbHU8/HOxmYPLLPuSloBuHlMKT/ZFnI4XAk+iTgT32CUhuKca
+    TEfuCCx7IZdEkPQH5a7mzMspYrwcYR8j491X5aMCgYBW89ZdktAOasX4ek9Wci3I
+    8LhPhLpXJDTV4Z8a1qZX1Nqaij4rJFQcIz5yot++kfgHpTB5c8mihtClTpJn6Y/D
+    /L+4yPTY5Zzsw819esxBY7tZuvf8svCz82AzMvdF1snU8YqBREi1b6hnu/5ruuJu
+    sVEAzEhcEnnL/lG3EzwcIQKBgHnVaplcNG6+moj8gPjcHiqZ0ph1sWtPNmu7WGWo
+    M9sCb/xiqVJ4P3rRt9v6sUkJ2JTPG7GVoiu/HRc/fXn8xN4Y9aMp4pU9zx9HP6QE
+    PjimmUJCbfciY29tnlJF6LvlJmNKnJ8Rubtwb2xlknsW95e4obQ+cYhmVEijS1fN
+    0O/HAoGAFHZkNZold2tE+MqGWOZXRta+P3WmE/edj8rxnCpiUmRkZKNU9H+1Dryi
+    tDUSrZdykm0QdJGZ8c5xoF6LZKiuOzWKd4/IxhK0agij+MRUp5S51qld9ZWISuyy
+    qlpS/roqfoVp5CWvpWUEcHKnEEA+xdrXYitzp7vP9npLrkO6AEg=
+    -----END RSA PRIVATE KEY-----
+  elasticsearch.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIDPjCCAiagAwIBAgIVAMn4flfBozVT9PZibF3EA8AHP4ASMA0GCSqGSIb3DQEB
+    CwUAMDQxMjAwBgNVBAMTKUVsYXN0aWMgQ2VydGlmaWNhdGUgVG9vbCBBdXRvZ2Vu
+    ZXJhdGVkIENBMB4XDTIxMTEwMTE5MTcyM1oXDTI0MTAzMTE5MTcyM1owGDEWMBQG
+    A1UEAxMNZWxhc3RpY3NlYXJjaDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoC
+    ggEBAI+GW519QiJzOUmVmHcWMHRAgUvuGQ1e028hZKTpeU/slnt8nwm+obSe6IgL
+    pzta95C47TW7SDbUkiEy10tt+IcrkRJPXJJ/jbXXQfl45We/VUFkPVUb/9ol/J1N
+    Z9bHb3kZXtaHrHmgBw9XjtrqFGm7OkqCY3J33nzaJrd+K+UR3g7KUhLF86QUeCbY
+    Sx4bxApgBiHx8aTSXmDtlv48xTev+wDEu911s5OB5c93i/YmLbmuzEzlh7kcSWuX
+    8/gLhyXYtJCJn9Rc/cjm88+4o3mj/IFLQ/YjUj+NeAkyDcN0yQWdVLbbuD1GxgRh
+    +7xQiM1xVi5XaMx27RpBLhp8Uh8CAwEAAaNjMGEwHQYDVR0OBBYEFD5t+pKUSAu0
+    vbGhrN3IpNYQVKFmMB8GA1UdIwQYMBaAFOTP4/0zyIJaNZDuplCpHHErlfl4MBQG
+    A1UdEQQNMAuCCWxvY2FsaG9zdDAJBgNVHRMEAjAAMA0GCSqGSIb3DQEBCwUAA4IB
+    AQAsU0En578AotSijOhhAV557N+6QHDtF0VxDTSUUMgka7FTPXY/B4WPnfCTnBOf
+    CClNM+UH3a6/Tq8bgZEi3tKMTXxjiMQRx3ZHnR61c9W09lK0TiWfjLAMgQ4uQrle
+    LWt9+ss3T6Tu/H36Tfcs4d6y1YLY4sdUBXRUmjVCxXJEnA1K+28Kx74u9tWplJ0/
+    h+eVHEl1LzLm+E/ttme/4LV+w+2KRHwb2zkLSd/N0TnYzE+WJV9xwKhZKv5W9cgM
+    C1oRwoR4Rl6ao434mmwp0iASW2n/7Nj+SrNZpgOWPlzH5vlOlcrzkwNBVuwxesKD
+    iGvxWZ29YKovs3Uwmbm5I4y8
+    -----END CERTIFICATE-----
+  ca.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIDSjCCAjKgAwIBAgIVAK6yob7g8aWrwWWVcp5kII+Oa7PiMA0GCSqGSIb3DQEB
+    CwUAMDQxMjAwBgNVBAMTKUVsYXN0aWMgQ2VydGlmaWNhdGUgVG9vbCBBdXRvZ2Vu
+    ZXJhdGVkIENBMB4XDTIxMTEwMTE5MTcyM1oXDTI0MTAzMTE5MTcyM1owNDEyMDAG
+    A1UEAxMpRWxhc3RpYyBDZXJ0aWZpY2F0ZSBUb29sIEF1dG9nZW5lcmF0ZWQgQ0Ew
+    ggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDUi1jWdX7VtKdBbQCmSEzP
+    CrcFvEtjxV6evAaiPj65e3+qXsgK8/nY+WNP8XzF+2yV66gj7AgbQLIEcKLLB/v+
+    sd+FNvJcTgephzWtfSVYLqdzC5EG5h8IQlUHgc7xkhqGihfMeTQkT9qs2gDvqMd8
+    bMsh7lhalPFyNTsHn0lmy/BHE+jdYdObx8RqpnuktBKVEFlIa9Y5Tfk4WvGBRx8N
+    uTMbZtH17FMdjaxSgRc03NbcveCHh829TfTBAEDnDRHrW06B9bbVt/mwLLGB968X
+    +TuACE4DCKkna5fSYqecpwtcvCaLGyAjo9igiIVAjPicLoVjC2XjfZNvd2chjtWJ
+    AgMBAAGjUzBRMB0GA1UdDgQWBBTkz+P9M8iCWjWQ7qZQqRxxK5X5eDAfBgNVHSME
+    GDAWgBTkz+P9M8iCWjWQ7qZQqRxxK5X5eDAPBgNVHRMBAf8EBTADAQH/MA0GCSqG
+    SIb3DQEBCwUAA4IBAQBAsDkLBATD2fjKGSEiBG6y0pwlowwa+Pbkl81fXJEswn91
+    80txDknlH1paRc+uRuBs4M57pMWiDMHeup68OjkEMUUE3bEkGC3bUs/DiGlF2fJj
+    3jU07AqavT3P1EIasuH9V5o2s28FJseoAfVAn82NcUhvs2Gvdk2jeCtGwNhZTg2F
+    u1auhuGsN3pTWA2Dz8csHxilFjDlZl1SWfZHJ7O0jS5KGWLTRUTFToDgVMNAhIoK
+    k2rleTCnCIYYPndAWSi/Kun9yTxTY2P9mvG964/HJvKkpLBzmhRavydWBLbezYoG
+    SjkY3kKZqs2ex+cBuPuWgjpWPSB7oOHNgpWvayyQ
+    -----END CERTIFICATE-----
+#secretMounts:
+#  - name: elastic-certificates
+#    secretName: elastic-certificates
+#    path: /usr/share/elasticsearch/config/certs

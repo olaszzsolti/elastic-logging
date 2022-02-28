@@ -1,0 +1,464 @@
+extraPorts:
+  - name: elastic
+    containerPort: 5044
+  - name: fluent
+    containerPort: 5045
+  - name: big
+    containerPort: 5047
+
+service:
+  ports:
+    - name: elastic
+      port: 5044
+      targetPort: 5044
+    - name: fluent
+      port: 5045
+      targetPort: 5045
+    - name: big
+      port: 5047
+      targetPort: 5047
+
+logstashJavaOpts: "-Xmx4g -Xms4g"
+
+resources:
+  requests:
+    cpu: "2000m"
+    memory: "6Gi"
+  limits:
+    cpu: "2000m"
+    memory: "6Gi"
+
+logstashConfig:
+  logstash.yml: |
+    xpack.management.enabled: false
+    pipeline.workers: 32
+    pipeline.batch.size: 500
+    pipeline.batch.delay: 50
+    pipeline.ordered: auto
+    http.host: 0.0.0.0
+    xpack.monitoring.enabled: true
+    xpack.monitoring.elasticsearch.username: logstash_system
+    xpack.monitoring.elasticsearch.password: 'asdasd'
+    xpack.monitoring.elasticsearch.hosts: [ 'https://minimum-es-master:9200' ]
+    xpack.monitoring.elasticsearch.ssl.certificate_authority: /usr/share/logstash/config/ca.crt
+  adp-json-validdation.rb: |
+    $validationDecodedJsonFieldParamName = "decodedJsonField"
+    $failTagParamName = "failTag"
+    def register(param)
+        decodedJsonFieldParamName = $validationDecodedJsonFieldParamName
+        failTagParamName = $failTagParamName
+        logger.debug("Check if parameter #{decodedJsonFieldParamName} is provided")
+        if (param[decodedJsonFieldParamName].nil? || param[decodedJsonFieldParamName].empty?)
+            raise ArgumentError.new("Parameter \"#{decodedJsonFieldParamName}\" is not provided")
+        end
+        logger.debug("Check if parameter #{failTagParamName} is provided")
+        if (param[failTagParamName].nil? || param[failTagParamName].empty?)
+            raise ArgumentError.new("Parameter \"#{failTagParamName}\" is not provided")
+        end
+        @decodedJsonField = param[decodedJsonFieldParamName]
+        @failTag = param[failTagParamName]
+        @REQUIRED_FIELDS = ["version", "timestamp", "severity", "service_id", "message"]
+        @VALID_FIELDS_VERSION_0_2_0 = @REQUIRED_FIELDS + ["metadata"]
+        @VALID_FIELDS_VERSION_0_3_0 = @VALID_FIELDS_VERSION_0_2_0 + ["facility", "subject", "resp_message", "resp_code"]
+        @VALID_FIELDS_VERSION_1_0_0 = @VALID_FIELDS_VERSION_0_3_0 + ["extra_data"]
+        @VERSION_0_2_0 = "0.2.0"
+        @VERSION_0_3_0 = "0.3.0"
+        @VERSION_1_0_0 = "1.0.0"
+        @VALID_VERSIONS = [@VERSION_0_2_0, @VERSION_0_3_0, @VERSION_1_0_0]
+        @VALID_SEVERITIES = ["debug", "info", "warning", "error", "critical"]
+        @VALID_METADATA_FIELDS = ["function", "category", "proc_id", "ul_id"]
+        @VALID_TIMESTAMP_REGEX = /^\d{4}\-\d\d\-\d\d[T][\d:\.]+([zZ]|([+\-])(\d\d):?(\d\d))?$/
+        def gotRequiredFields(fields)
+            @REQUIRED_FIELDS.each do |field|
+                if (!fields.include?(field))
+                    return false
+                end
+            end
+            return true
+        end
+        def validVersion(version)
+            if (version.class != String)
+                return false
+            end
+            return @VALID_VERSIONS.include?(version)
+        end
+        def validMessage(message)
+            if (message.class != String)
+                return false
+            end
+            return true
+        end
+        def validSeverity(severity)
+            if (severity.class != String)
+                return false
+            end
+            return @VALID_SEVERITIES.include?(severity)
+        end
+        def validServiceId(serviceId)
+            if (serviceId.class != String)
+                return false
+            end
+            return true
+        end
+        def validExtraData(extraData)
+            if (extraData.nil?)
+                return true
+            end
+            if (extraData.class != Hash)
+                return false
+            end
+            if (extraData.empty?)
+                return false
+            end
+            return true
+        end
+        def validMetadata(metadata, version)
+            if (metadata.nil?)
+                return true
+            end
+            if (metadata.class != Hash)
+                return false
+            end
+            if (metadata.empty?)
+                return false
+            end
+            case version
+            when @VERSION_0_2_0, @VERSION_0_3_0
+                if (metadata.keys.length > @VALID_METADATA_FIELDS.length)
+                    return false
+                end
+                metadata.keys.each do |key|
+                    if (!@VALID_METADATA_FIELDS.include?(key))
+                        return false
+                    end
+                    if (metadata[key].class != String)
+                        return false
+                    end
+                end
+            when @VERSION_1_0_0
+                metadata.keys.each do |key|
+                    if (metadata[key].class != String)
+                        return false
+                    end
+                end
+            end
+            return true
+        end
+        def validTimestamp(timestamp)
+            if (timestamp.class == LogStash::Timestamp)
+                return true
+            end
+            if (timestamp.class != String)
+                return false
+            end
+            return timestamp =~ @VALID_TIMESTAMP_REGEX
+        end
+        def validFacility(facility)
+            if (!facility.nil? && facility.class != String)
+                return false
+            end
+            return true
+        end
+        def validSubject(subject)
+            if (!subject.nil? && subject.class != String)
+                return false
+            end
+            return true
+        end
+        def validRespMessage(respMessage)
+            if (!respMessage.nil? && respMessage.class != String)
+                return false
+            end
+            return true
+        end
+        def validRespCode(respCode)
+            if (!respCode.nil? && respCode.class != String)
+                return false
+            end
+            return true
+        end
+        def gotNoAdditionalFields(fields, version)
+            case version
+            when @VERSION_0_2_0
+                return (fields & @VALID_FIELDS_VERSION_0_2_0) == fields
+            when @VERSION_0_3_0
+                return (fields & @VALID_FIELDS_VERSION_0_3_0) == fields
+            when @VERSION_1_0_0
+                return (fields & @VALID_FIELDS_VERSION_1_0_0) == fields
+            end
+            return false
+        end
+        def addValidationFailureTag(event)
+            tags = event.get("tags")
+            if (tags.nil?)
+                tags = []
+            end
+            tags.push(@failTag)
+            event.set("tags", tags)
+            return [event]
+        end
+    end
+    def filter(event)
+        logger.debug("Validate ADP JSON events")
+        logger.debug("Check if event got required fields")
+        if (!gotRequiredFields(event.to_hash.keys))
+            return addValidationFailureTag(event)
+        end
+        logger.debug("Check if event got valid version")
+        version = event.get("[version]")
+        if (!validVersion(version))
+            return addValidationFailureTag(event)
+        end
+        logger.debug("Check if event got valid message")
+        if (!validMessage(event.get("[message]")))
+            return addValidationFailureTag(event)
+        end
+        logger.debug("Check if event got valid timestamp")
+        if (!validTimestamp(event.get("[timestamp]")))
+            return addValidationFailureTag(event)
+        end
+        logger.debug("Check if event got valid severity levels")
+        if (!validSeverity(event.get("[severity]")))
+            return addValidationFailureTag(event)
+        end
+        logger.debug("Check if event got valid service id")
+        if (!validServiceId(event.get("[service_id]")))
+            return addValidationFailureTag(event)
+        end
+        logger.debug("Check if event got metadata field defined")
+        metadata = event.get("[metadata]")
+        if (!validMetadata(metadata, version))
+            return addValidationFailureTag(event)
+        end
+        case version
+        when @VERSION_0_3_0, @VERSION_1_0_0
+            logger.debug("Check if event got facility field defined")
+            if (!validFacility(event.get("[facility]")))
+                return addValidationFailureTag(event)
+            end
+            logger.debug("Check if event got subject field defined")
+            if (!validSubject(event.get("[subject]")))
+                return addValidationFailureTag(event)
+            end
+            logger.debug("Check if event got resp_message field defined")
+            if (!validRespMessage(event.get("[resp_message]")))
+                return addValidationFailureTag(event)
+            end
+            logger.debug("Check if event got resp_code field defined")
+            if (!validSubject(event.get("[resp_code]")))
+                return addValidationFailureTag(event)
+            end
+            if (version == @VERSION_1_0_0)
+                logger.debug("Check if event got extraData field defined")
+                extraData = event.get("[extra_data]")
+                if (!validExtraData(extraData))
+                    return addValidationFailureTag(event)
+                end
+            end
+        end
+        logger.debug("Check if event got any additional fields then accepted")
+        if (!gotNoAdditionalFields(event.to_hash.keys, version))
+            return addValidationFailureTag(event)
+        end
+        logger.debug("Event is in a valid ADP JSON format")
+        return [event]
+    end
+  logstash.pkcs8.key: |
+    -----BEGIN PRIVATE KEY-----
+    MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCj7r9Ur5LT36Cf
+    NCTW99XDQpySg6YGHYJ0ziG6gr6ANCK/JEMYljFb3v/vCbH1hCgxUUfyT8hPnI8n
+    uv4VNX0/jadyuCdPKOIRpHRdJpPvwubtKywzN8yjcHWgTv7SMOBGdA0pLRbAjxwZ
+    OUrQY95gbFvCfIZ1b3sR88ubHcREMASTUvmNIOes7HdvBHbM83qDXbFGipHgf0yB
+    FkFLUtnUSkXgROeQB4656IITgguQN8wxOQPkVBWyveN9avZ+fKeHUplr/nKajEbe
+    Qkyl8C0DqwauJjo61vbH+T22ujevjBrSv7kMzLTQ00i5U+xKkiGfW6VcSvZOBW/W
+    bsVuluylAgMBAAECggEAEc8zB7sSoKRNBGQQqS6qkU3QHxYLTY3GKZ9n8vsXlsD9
+    52Buo6H+1xlub48mP2Mt+fxNFyo2EPlpZKpqxm4VtHeqBzYHcJD4omxd3JgqKTmL
+    h0eR7oyI1awMM1rG/JnPu7Je6FLG2SuS+hCLLAGK2/8u/Cg1dAD6UKnOPFoAWQc7
+    zUjr3vJDNPG+V02d5tbc50LHkpcnWHDDgABxRoCC/ICWM0VDx3jJkxU8s0lpCHN8
+    PoHHz44ktLphw6fxRT8i8/9uQE8Ha0xfil9q5zbiv8MLtU4pUP3wURPJfdc24rCX
+    wPsjvTM0uqj0VKhNUulWqrM5LY7yAc5Ga1li/PCILwKBgQDcvYGPsYhGpCMVGhv1
+    s13dmQkugXkeD7bAPc7vJSlPLtKuRD4g1XfmfSjGAyPBJw6e/2C2oZOMIbXgEwAA
+    PQ3TjjpN6WS8SNUQiHhfgm8HEoM53LfSZfgjstqjP3sAbbbpVvM9Vn9YMirbgvqn
+    WJTAPThR4zd4lvWdfk2LMr8UwwKBgQC+HkRiBKct/3tbBNqbIKoKBmrGBJso6PjH
+    ZQybYBCeWw3F0WRr8AZyo0EHIIO4o3mDUkOnmZAyf3nFp3INyz5EtTnw06cmyJHC
+    C35QKZg4oj7ihE+AzCFEFE6Kx0iJzCA9xA/c2MSVBXqsTg0E/vtjVeeq6d8QpVTW
+    Pzs3q05CdwKBgCEbFuRbJuoZUd2nVcwqw4gpnJPp/SVCDBGW84MwWpqylgxm1b6M
+    5XefC89uxxz/45R7DqE1aHCa2bEqiFSA06MH8LygpWgLsFDTduI0KLyxzRaPgM5A
+    Vs/b0iirq6Hr0oP6c26em2i51W2onjkc8upGBD1by4T9dwbQ24Zl7PyLAoGAWwIK
+    IhGwJajC2BM+wjukqh/gROI3lCHR1UFeA5K84dEcirFtrO29aGsV2d+Krnwy0tYy
+    ZKxyBnpXRHKfelLsf99w2QO4ZCxm+ciesqj2oUWpbK2BkVomInzGDFDRPIVmeaq9
+    HS73C48P5iOGv/l/RVH+ECbcDQ/XyKeEJWXvlIkCgYEAtHe9f0NoX5WFpsjx++V7
+    jeerdT36wGjKlIlvaaNzcAyLi26Xl4w1DGvcAbeF9tg63924XQ0UAPPvzftxCkbJ
+    GBlY1x4GuLqzTtG0CwXejavhBQlTrRsCAiA/2p6vuorbqBpSD6D+EbJWMzz7kkzK
+    Z8AnljR1KMGF11w3aZSjuI4=
+    -----END PRIVATE KEY-----
+  logstash.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIDWTCCAkGgAwIBAgIUNkHXA2PHY/YfO0WI7ADyT4G3dSswDQYJKoZIhvcNAQEL
+    BQAwNDEyMDAGA1UEAxMpRWxhc3RpYyBDZXJ0aWZpY2F0ZSBUb29sIEF1dG9nZW5l
+    cmF0ZWQgQ0EwHhcNMjExMTA5MDkyNjM3WhcNMjQxMTA4MDkyNjM3WjAkMSIwIAYD
+    VQQDExltaW5pbXVtLWxvZ3N0YXNoLWxvZ3N0YXNoMIIBIjANBgkqhkiG9w0BAQEF
+    AAOCAQ8AMIIBCgKCAQEAo+6/VK+S09+gnzQk1vfVw0KckoOmBh2CdM4huoK+gDQi
+    vyRDGJYxW97/7wmx9YQoMVFH8k/IT5yPJ7r+FTV9P42ncrgnTyjiEaR0XSaT78Lm
+    7SssMzfMo3B1oE7+0jDgRnQNKS0WwI8cGTlK0GPeYGxbwnyGdW97EfPLmx3ERDAE
+    k1L5jSDnrOx3bwR2zPN6g12xRoqR4H9MgRZBS1LZ1EpF4ETnkAeOueiCE4ILkDfM
+    MTkD5FQVsr3jfWr2fnynh1KZa/5ymoxG3kJMpfAtA6sGriY6Otb2x/k9tro3r4wa
+    0r+5DMy00NNIuVPsSpIhn1ulXEr2TgVv1m7FbpbspQIDAQABo3MwcTAdBgNVHQ4E
+    FgQU/3zteXlx4xk4AMnc8BHF89gVWP4wHwYDVR0jBBgwFoAUizoMYYeRHJM7hDqE
+    ev31cCsllsswJAYDVR0RBB0wG4IZbWluaW11bS1sb2dzdGFzaC1sb2dzdGFzaDAJ
+    BgNVHRMEAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQB3oFF126/7+uqooZuShuOMtV7/
+    27juN1fWTsCipmCAeuBf1B0jRDaOobFGan6NfoKffQt+teWU/ikSdhkkEexBS9u+
+    xrWjvFu2Gc939BtogKm/OW4v59TGMd0Xaa7oTrUgEVuepkEa7bqDUxWbCXs3h0pB
+    mKtnPBWbjaLUOJo/ctFF0Gv4niZcrtSrvUBsMEy6v2YuV8tnBHdyN08T1tZCkN6e
+    l+bI5JGJg87bsAbiHaBakp4DZa9F6KCnG/YpcwC5rNDzQATQq1PTlL3VRGf3MxlY
+    V2FZlX7kps/fMKFzyCXxmJ2Tgz/AA/lVt+D4cIsmzxTprOuDh9aEYhDLyWWf
+    -----END CERTIFICATE-----
+  ca.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIDSTCCAjGgAwIBAgIUCiDZr7eNh+oX2Dub29D2wb1ePtswDQYJKoZIhvcNAQEL
+    BQAwNDEyMDAGA1UEAxMpRWxhc3RpYyBDZXJ0aWZpY2F0ZSBUb29sIEF1dG9nZW5l
+    cmF0ZWQgQ0EwHhcNMjExMTA4MTAyNjAwWhcNMjQxMTA3MTAyNjAwWjA0MTIwMAYD
+    VQQDEylFbGFzdGljIENlcnRpZmljYXRlIFRvb2wgQXV0b2dlbmVyYXRlZCBDQTCC
+    ASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAK1kD6U0ti9P7BWSDpV0DO/E
+    X4q8uGq5SZMskDs6jenDKq8aOHj+J0ozPf6twOltJQ2SS8pjL6JTotx86zYe4KsH
+    emnwiOJqmw/yYxZ3jmJKK8Sqo/rD3sZqQwgSHIe9uGtlMDgaD3FGB/BAdiv/8159
+    sBYMaIJbpJNPDZFs/qmhJFNCWtkWmfScC3/yWlMTkDcme2tUv52VZTFpUqshtvMz
+    4nSePWhReD5l1LsEkAhiVc3GoyCrR9v5JRa0l81UaiQi+30vD3RVABJkhCfMzi8x
+    w2vX9gN5G0N68OY13C3S+3teQlLm9PU/7eGsRFxYPlJL3iRwiviLyb4W0jRc73sC
+    AwEAAaNTMFEwHQYDVR0OBBYEFIs6DGGHkRyTO4Q6hHr99XArJZbLMB8GA1UdIwQY
+    MBaAFIs6DGGHkRyTO4Q6hHr99XArJZbLMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZI
+    hvcNAQELBQADggEBADPTa16qW2baS99Mx6OhivSSfilJkFWc9ipooUJvEv4K+j10
+    r+0qEyMu88zKHF84WEnTygJII8lW50ncPhOgbSGJEbJcz8bzA34yIFs4rs0tikzZ
+    M67XEx75zOW2zQOeJbiTfzhXQTJLnVzzQPnwWhE3jTG4QbEY5mFD8u7ABfemzoLj
+    Aqepbba91kmQvVF6jbiu8ZBe0VVJSyUSddVI98bs01BnWMOR3OmE89+sd8SRnIXa
+    C2FqBMXCSesYOQ7fGMpICzWeXCIIwLsi7+cUpShp9iL5Z9FU4Q/r9lgpdmssqkKF
+    7IPAMVhQSYUsvsPh2EJIpQB8CAgVwUkhj8fMOC8=
+    -----END CERTIFICATE-----
+logstashPipeline:
+  logstash.conf: |
+    input {
+       beats {
+          port => 5044
+          id => "elastic"
+          type => "elastic"
+          ssl => true
+          ssl_key => "/usr/share/logstash/config/logstash.pkcs8.key"
+          ssl_certificate => "/usr/share/logstash/config/logstash.crt"
+       }
+       http {
+          port => 5045
+          id => "fluent"
+          type => "fluent"
+          ssl => true
+          ssl_key => "/usr/share/logstash/config/logstash.pkcs8.key"
+          ssl_certificate => "/usr/share/logstash/config/logstash.crt"
+       }
+       http {
+          port => 5047
+          id => "big"
+          type => "big"
+          ssl => true
+          ssl_key => "/usr/share/logstash/config/logstash.pkcs8.key"
+          ssl_certificate => "/usr/share/logstash/config/logstash.crt"
+       }
+    }
+    filter {
+      mutate { add_field => { "[extra_data][status]" => "unprocessed" } }
+      if [type] == "readiness" {
+        drop {}
+      } else if [type] == "fluent" {
+        if [extra_data][processor] == "fluentbit" {
+            mutate { update => { "[extra_data][status]" => "processed" } }
+        }
+        date {
+            match => [ "date", "UNIX" ]
+            remove_field => [ "date" ]
+        }
+        mutate {
+            remove_field => [ "headers", "host", "type", "@version" ]
+        }
+      } else if [extra_data][processor] == "logstash" {
+        mutate { rename => { "msg" => "message" } }
+        mutate { strip => [ "[message]" ] }
+        dissect {
+          mapping => {
+            "message" => "%{[msg][ts]} PayloadMatedPair=%{[msg][payloadmatedpair]} %{[msg][k1]},%{[msg][k2]},%{[msg][rest]}"
+          }
+          remove_field => [ "message" ]
+        }
+        date {
+          match => [ "[msg][ts]", "ISO8601" ]
+          remove_field => [ "[msg][ts]" ]
+        }
+        csv {
+          columns => ["[msg][k3]","[msg][k4]","[msg][k5]","[msg][k6]"]
+          source => "[msg][rest]"
+          remove_field => [ "[msg][rest]" ]
+        }
+        if [msg][k4] {
+          mutate {
+            rename => { "[msg][k1]" => "[msg][callee]" }
+            rename => { "[msg][k2]" => "[msg][caller]" }
+            rename => { "[msg][k3]" => "[msg][call_id]" }
+            rename => { "[msg][k4]" => "[msg][context_id]" }
+            rename => { "[msg][k5]" => "[msg][termination_id]" }
+            rename => { "[msg][k6]" => "[msg][reason]" }
+          }
+        } else {
+          mutate {
+            rename => { "[msg][k1]" => "[msg][context_id]" }
+            rename => { "[msg][k2]" => "[msg][termination_id]" }
+            rename => { "[msg][k3]" => "[msg][reason]" }
+          }
+        }
+        mutate {
+          rename => { "msg" => "message" }
+        }
+        mutate {
+          remove_field => [ "@version", "agent", "ecs", "beat", "log", "type", "source", "stream", "offset", "json", "host", "input", "prospector", "tags", "[kubernetes][container][image]", "[kubernetes][labels]" ]
+        }
+        mutate { update => { "[extra_data][status]" => "processed" } }
+      } else if [extra_data][processor] == "filebeat" {
+        mutate { rename => { "msg" => "message" } }
+        mutate {
+          remove_field => [ "@version", "agent", "ecs", "beat", "log", "type", "source", "stream", "offset", "json", "host", "input", "prospector", "tags", "[kubernetes][container][image]", "[kubernetes][labels]" ]
+        }
+        mutate { update => { "[extra_data][status]" => "processed" } }
+      } else if [extra_data][processor] == "elasticsearch" {
+        mutate { rename => { "msg" => "message" } }
+        mutate {
+          remove_field => [ "@version", "agent", "ecs", "beat", "log", "type", "source", "stream", "offset", "json", "host", "input", "prospector", "tags", "[kubernetes][container][image]", "[kubernetes][labels]" ]
+        }
+        mutate { update => { "[extra_data][status]" => "unprocessed" } }
+      }
+      mutate {
+        add_field => { "timestamp" => "%{@timestamp}" }
+      }
+      ruby {
+        path => "/usr/share/logstash/config/adp-json-validdation.rb"
+        script_params => {
+          "decodedJsonField" => "ignore"
+          "failTag" => "schema-validation-unknown"
+        }
+      }
+      if [extra_data][asi][log_plane] == "alarm" {
+        mutate {
+            replace => {"logplane" => "adp-app-asi-logs"}
+        }
+      } else if [facility] == "log audit" {
+         mutate {
+            replace => {"logplane" => "adp-app-audit-logs"}
+         }
+      }
+    }
+    output {
+      elasticsearch {
+        hosts => ["https://minimum-es-master:9200"]
+        http_compression => true
+        index => "lfdia-exp-10000-64000"
+      # index => "lfdia-%{[extra_data][status]}"
+        cacert => '/usr/share/logstash/config/ca.crt'
+        user => 'logstash_writer'
+        password => 'asdasd'
+      }
+    }

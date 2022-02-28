@@ -1,0 +1,45 @@
+PUT _ingest/pipeline/epic_grok
+{
+  "processors": [
+    {
+      "grok": {
+        "field": "message",
+        "patterns": [
+          "%{TIMESTAMP_ISO8601:@timestamp} PayloadMatedPair=%{NUMBER:payloadmatedpair:int} %{NUMBER:context_id:int},%{DATA:termination_id},%{WORD:reason}|%{TIMESTAMP_ISO8601:@timestamp} PayloadMatedPair=%{NUMBER:payloadmatedpair:int} %{DATA:callee},%{DATA:caller},%{WORD:call_id},%{NUMBER:context_id:int},%{DATA:termination_id},%{WORD:reason}"
+        ]
+      }
+    },
+    {
+      "remove": {
+        "field": "message"
+      }
+    },
+    {
+      "remove": {
+        "field": [
+          "path",
+          "host",
+          "@version"
+        ]
+      }
+    },
+    {
+      "set": {
+        "field": "logplane",
+        "value": "app-logs"
+      }
+    },
+    {
+      "set": {
+        "field": "log_type",
+        "value": "HangingResourcesLog"
+      }
+    },
+    {
+      "set": {
+        "field": "extra_data.project",
+        "value": "th"
+      }
+    }
+  ]
+}

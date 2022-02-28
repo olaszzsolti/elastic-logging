@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: lfdialoggingapp
+spec:
+  replicas: 1
+  serviceName: lfdialoggingapp-svc
+  selector:
+    matchLabels:
+      app: lfdialoggingapp
+  template:
+    metadata:
+      labels:
+        app: lfdialoggingapp
+    spec:
+      containers:
+      - name: lfdialoggingapp
+        image: armdocker.rnd.ericsson.se/dockerhub-ericsson-remote/stvnpelle/lfdialog:latest
+        imagePullPolicy: IfNotPresent
+#        imagePullPolicy: Always
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "1000m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: logs
+          mountPath: ./logs
+        env:
+        - name: PERIOD
+          value: "30"
+        - name: FINISH_AFTER_SEC
+          value: "900"
+        - name: LOG_FORMAT
+          value: "plain"
+        - name: PROCESSOR
+          value: "unprocessed"
+        - name: STACK
+          value: "fluent"
+      - name: filebeat
+        image: docker.elastic.co/beats/filebeat:7.9.1
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: "750Mi"
+            cpu: "500m"
+          limits:
+            memory: "750Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: logs
+          mountPath: /logs
+        - name: lfdia-filebeat-cfmap
+          mountPath: "/usr/share/filebeat/filebeat.yml"
+          subPath: "filebeat.yml"
+          readOnly: true
+      - name: fluentbit
+#        image: fluent/fluent-bit:1.8.2-debug
+        image: fluent/fluent-bit:1.8.2
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: "750Mi"
+            cpu: "500m"
+          limits:
+            memory: "750Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: logs
+          mountPath: /logs
+        - name: lfdia-fluentbit-cfmap
+          mountPath: "/fluent-bit/etc/"
+          readOnly: true
+      volumes:
+      - name: logs
+        emptyDir: {}
+      - name: lfdia-filebeat-cfmap
+        configMap:
+          name: lfdia-filebeat-cfmap
+      - name: lfdia-fluentbit-cfmap
+        configMap:
+          name: lfdia-fluentbit-cfmap

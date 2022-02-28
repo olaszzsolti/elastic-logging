@@ -1,0 +1,76 @@
+filebeat.inputs:
+# Process plain text logs.
+ - type: log
+   enabled: true
+   # Set some values accodring to sample SBG configuration.
+   close_timeout: 5m
+   fields_under_root: true
+   # Enabling these in any of our cases, causes the addition of '"json": {}' to the root.
+   # json.keys_under_root: true
+   # json.message_key: message
+   # Remove some additional fields.
+   publisher_pipeline.disable_host: true
+   # Set path to HangingResources.log
+   paths:
+     - /logs/HangingResources.log # TODO: update path.
+     # Field format:
+     # @CY-@Cm-@CdT​@Ch:@Cn:@Cs.@Ck@Cz @Sl @Cb
+     # @CY-@Cm-@CdT​@Ch:@Cn:@Cs.@Ck@Cz -- timestamp
+     # @Sl -- PayloadMatedPair
+     # @Cb -- comma separated values (CSV) message part
+     # CSV part format 1: callee,caller,call_id,context_id,termination_id,reason
+     # Sample 1:
+     # 2021-06-28T16:10:32.519+0000 PayloadMatedPair=1 sip:+58555408658@xm.va;user=phone,sip:+19392560756@ubqabfx.sdou.jwg.q.mk;user=phone,glb65kd8530qlai5kalot9dcpvrux7u9,2156988,ip/730/402/2146359,media_inactivity​                                                                                                                                                                                                                                                                                                                                                                          
+     # CSV part format 2: context_id,termination_id,reason
+     # Sample 2:
+     # 2021-06-28T16:10:22.509+0000 PayloadMatedPair=3 311885,ip/867/966/8027539,normal_oab_process                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+   processors:
+     # Delete unnecessary fields in accordance with SBG configuration.
+     # The following fields cannot be removed this way:
+     # '@metadata', 'ecs', 'host', 'agent'
+     - drop_fields:
+         fields: ["input", "log", "prospector", "offset"]
+     # Rename fields in accordance with SBG configuration, however no
+     # 'source' field is present in when running the stack locally.
+     # This is also signalled in the error field.
+     # - rename:
+     #     fields:
+     #       - from: "source"
+     #         to: "filename"
+     # Add new files to imitate ADP log schema (based on sample SBG log
+     # configuration).
+     - add_fields:
+         target: ''
+         fields:
+           logplane: "app-logs"
+           log_type: "HangingResourcesLog"
+           extra_data.project: "th"
+           kubernetes.pod.uid: "test-uid"
+           kubernetes.pod.name: "test-pod"
+           kubernetes.node.name: "test-node"
+           kubernetes.namespace: "test-namespace"
+           service_id: "test-svc"
+           severity: "info"
+           version: "0.2.0"
+# Test by outputting formatted JSON.
+# output.console.pretty: true
+
+# Send logs to Logstash.
+output.logstash:
+  hosts: ["localhost:5044"] # Skip processing in Logstash.
+  # hosts: ["localhost:5045"] # Process at Logstash.
+  bulk_max_size: 2048
+  worker: 1
+  pipelining: 0
+  ttl: 30
+  logging.level: "error"
+  # Comment these for now, revisit them when deploying to Kubernetes
+  # ssl.* setup when TLS is enabled
+  # logging.metrics.enabled: false
+  # logging.to_files: true
+  # logging.files:
+  #   path: "/logs"
+  #   name: filebeat.log
+  #   keepfiles: 5
+  #   permissions: 0600
+  #   rotateeverybytes: 1000000
